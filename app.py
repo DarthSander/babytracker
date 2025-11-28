@@ -34,7 +34,8 @@ db = SQLAlchemy(app)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = "index"  # we doen login via de SPA
+# Belangrijk: we hebben geen /login route, login gaat via de SPA op "/"
+login_manager.login_view = "index"
 
 # -------------------------------------------------
 # Models
@@ -42,6 +43,8 @@ login_manager.login_view = "index"  # we doen login via de SPA
 
 
 class User(UserMixin, db.Model):
+    __tablename__ = "user"
+
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(100), unique=True, nullable=False)
     password_hash = db.Column(db.String(200), nullable=False)
@@ -101,7 +104,15 @@ def load_user(user_id: str):
 
 
 def init_db() -> None:
-    """Maak database + standaard gebruikers uit .env aan."""
+    """
+    Maak database + standaard gebruikers uit .env aan.
+
+    In je .env kun je bv. zetten:
+      USER1_NAME=papa
+      USER1_PASS=wachtwoord1
+      USER2_NAME=mama
+      USER2_PASS=wachtwoord2
+    """
     with app.app_context():
         db.create_all()
 
@@ -133,6 +144,13 @@ def is_night(dt: datetime) -> bool:
     """Simpel onderscheid dag/nacht."""
     hour = dt.hour
     return hour < 7 or hour >= 19
+
+
+# 🔥 BELANGRIJK: dit zorgt ervoor dat op Render de tabellen
+# ALTÍJD worden aangemaakt vóór de eerste echte request.
+@app.before_first_request
+def _setup_db():
+    init_db()
 
 
 # -------------------------------------------------
@@ -395,7 +413,7 @@ def api_summary():
         end = s.end_time or now_dt
         duration = (end - start).total_seconds() / 3600.0
 
-        # heel simpele indeling op basis van starttijd
+        # eenvoudige indeling op basis van starttijd
         if is_night(start):
             night_hours += duration
         else:
@@ -435,8 +453,8 @@ def api_summary():
             "ok": True,
             "sleep_dist": [round(day_hours, 1), round(night_hours, 1)],
             "feed_dist": [
-                feed_counts["bottle"] + feed_counts["breast"],
-                feed_counts["solid"],
+                feed_counts["bottle"] + feed_counts["breast"],  # vloeibaar
+                feed_counts["solid"],  # vast
             ],
             "growth": growth_series,
         }
@@ -506,5 +524,6 @@ def api_export():
 
 
 if __name__ == "__main__":
+    # Lokaal: direct db + users aanmaken
     init_db()
     app.run(debug=True, host="0.0.0.0", port=5000)
