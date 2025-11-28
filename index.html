@@ -362,9 +362,8 @@
                                 />
                             </form>
                             <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                                Standaardgebruikers staan in je <code>.env</code>, bijv.{" "}
-                                <span className="font-mono">papa / wachtwoord1</span> of{" "}
-                                <span className="font-mono">mama / wachtwoord2</span>.
+                                                               <span className="font-mono"></span>{" "}
+                                <span className="font-mono"></span>
                             </p>
                         </div>
                     </Card>
@@ -723,7 +722,7 @@
     }
 
     // ----------------------------------------------------
-    // Dashboard (tabs + theme toggle)
+    // Dashboard (tabs + theme toggle + CSV export)
     // ----------------------------------------------------
 
     function Dashboard({ user, onLogout, theme, onToggleTheme }) {
@@ -855,7 +854,7 @@
                             </div>
                         </Card>
 
-                        {/* Tabs */}
+                        {/* Tabs + CSV export */}
                         <div className="flex items-center justify-between gap-3">
                             <div className="inline-flex rounded-full bg-slate-100 p-1 text-[11px] border border-slate-200
                                              dark:bg-slate-900 dark:border-slate-700">
@@ -886,11 +885,23 @@
                                     <span>Grafieken</span>
                                 </button>
                             </div>
-                            {loading && (
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                    Data wordt geladen…
-                                </p>
-                            )}
+
+                            <div className="flex items-center gap-3">
+                                {loading && (
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                        Data wordt geladen…
+                                    </p>
+                                )}
+                                <a
+                                    href="/api/export"
+                                    className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11px] border border-slate-200 bg-slate-50 text-slate-700
+                                               hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800
+                                               active:scale-[0.98] transition focus:outline-none focus:ring-2 focus:ring-slate-400/70 dark:focus:ring-slate-600/70"
+                                >
+                                    <span>📥</span>
+                                    <span>Exporteer CSV</span>
+                                </a>
+                            </div>
                         </div>
 
                         {tab === 'overview' && (
