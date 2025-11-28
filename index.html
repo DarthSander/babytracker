@@ -311,8 +311,8 @@
         const { useState, useEffect } = React;
         const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = Recharts;
 
-        // Update this to your backend URL
-        const API_URL = 'https://babytracker-production.up.railway.app/api';
+        // API URL - relative path because frontend and backend are on same server
+        const API_URL = '/api';
 
         function BabyTracker() {
             const [theme, setTheme] = useState('light');
