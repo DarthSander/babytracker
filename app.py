@@ -1,10 +1,10 @@
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import json
 import os
 from datetime import datetime
 
-app = Flask(__name__, static_folder='.')
+app = Flask(__name__)
 CORS(app)
 
 DATA_FILE = 'baby_data.json'
@@ -26,11 +26,6 @@ def init_files():
             json.dump(users, f)
 
 init_files()
-
-# Serve frontend
-@app.route('/')
-def index():
-    return send_from_directory('.', 'index.html')
 
 # Login endpoint
 @app.route('/api/login', methods=['POST'])
@@ -85,6 +80,24 @@ def delete_entry(entry_id):
         json.dump(entries, f, indent=2)
     
     return jsonify({'success': True})
+
+# Serve frontend
+@app.route('/')
+def index():
+    try:
+        with open('index.html', 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        return f"""
+        <html>
+        <body>
+            <h1>Error: index.html not found</h1>
+            <p>Current directory: {os.getcwd()}</p>
+            <p>Files in directory:</p>
+            <pre>{chr(10).join(os.listdir('.'))}</pre>
+        </body>
+        </html>
+        """, 404
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
