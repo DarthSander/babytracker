@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="nl" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <title>Baby Tracker</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <!-- Tailwind via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- React via CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+
+    <!-- Babel voor JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            200: '#c7d2fe',
+                            300: '#a5b4fc',
+                            400: '#818cf8',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            800: '#3730a3',
+                            900: '#312e81'
+                        },
+                        gold: '#facc15'
+                    },
+                    boxShadow: {
+                        soft: '0 18px 45px rgba(15,23,42,0.45)'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            -webkit-font-smoothing: antialiased;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+<div id="root" class="min-h-screen"></div>
+
+<script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // ----------------------------------------------------
+    // Helpers
+    // ----------------------------------------------------
+
+    async function apiFetch(path, options = {}) {
+        const merged = {
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(options.headers || {})
+            },
+            ...options
+        };
+
+        if (!merged.method || merged.method.toUpperCase() === 'GET') {
+            delete merged.body;
+        }
+
+        const res = await fetch(path, merged);
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || data.ok === false) {
+            const msg = data.error || data.message || 'Er ging iets mis.';
+            throw new Error(msg);
+        }
+
+        return data;
+    }
+
+    function formatTime(isoString) {
+        if (!isoString) return '–';
+        const dt = new Date(isoString);
+        return dt.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function formatDate(isoString) {
+        if (!isoString) return '';
+        const dt = new Date(isoString);
+        return dt.toLocaleDateString('nl-NL', { day: '2-digit', month: '2-digit' });
+    }
+
+    // ----------------------------------------------------
+    // Basis UI
+    // ----------------------------------------------------
+
+    function Logo() {
+        return (
+            <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-gold/20 flex items-center justify-center shadow-soft border border-gold/40">
+                    <span className="text-2xl">👣</span>
+                </div>
+                <div className="flex flex-col">
+                    <span className="font-semibold tracking-tight text-slate-900 dark:text-slate-50">
+                        Baby Tracker
+                    </span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                        Rustig overzicht voor drukke nachten
+                    </span>
+                </div>
+            </div>
+        );
+    }
+
+    function Card({ children, className = '' }) {
+        return (
+            <div
+                className={
+                    "rounded-2xl border shadow-soft backdrop-blur-sm " +
+                    "bg-white/90 border-slate-200 " +
+                    "dark:bg-slate-900/80 dark:border-slate-800/70 " +
+                    "p-4 sm:p-5 " +
+                    className
+                }
+            >
+                {children}
+            </div>
+        );
+    }
+
+    function StatPill({ label, value, icon }) {
+        return (
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5
+                            dark:bg-slate-900/90 dark:border-slate-700">
+                <div className="flex items-center gap-2">
+                    <div className="h-7 w-7 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-gold text-sm">
+                        {icon}
+                    </div>
+                    <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                        {label}
+                    </span>
+                </div>
+                <span className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-50 text-right">
+                    {value}
+                </span>
+            </div>
+        );
+    }
+
+    function PrimaryButton({ icon, label, onClick, className = '' }) {
+        return (
+            <button
+                type="button"
+                onClick={onClick}
+                className={
+                    "inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 " +
+                    "bg-slate-900 text-slate-50 " +
+                    "dark:bg-gold dark:text-slate-950 " +
+                    "text-xs sm:text-sm font-semibold " +
+                    "shadow-soft hover:brightness-110 active:scale-[0.98] transition " +
+                    "focus:outline-none focus:ring-2 focus:ring-gold/60 " +
+                    className
+                }
+            >
+                {icon && <span className="text-sm">{icon}</span>}
+                <span>{label}</span>
+            </button>
+        );
+    }
+
+    function GhostButton({ icon, label, onClick, className = '' }) {
+        return (
+            <button
+                type="button"
+                onClick={onClick}
+                className={
+                    "inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 " +
+                    "bg-slate-100 text-slate-800 border border-slate-200 " +
+                    "hover:bg-slate-200 " +
+                    "dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800 " +
+                    "text-[11px] sm:text-xs font-medium " +
+                    "active:scale-[0.98] transition " +
+                    "focus:outline-none focus:ring-2 focus:ring-slate-400/70 dark:focus:ring-slate-600/70 " +
+                    className
+                }
+            >
+                {icon && <span className="text-sm">{icon}</span>}
+                <span>{label}</span>
+            </button>
+        );
+    }
+
+    function ChartCard({ title, description, type, labels, data }) {
+        const canvasRef = useRef(null);
+        const chartRef = useRef(null);
+
+        useEffect(() => {
+            if (!canvasRef.current || !labels || !data) return;
+
+            if (chartRef.current) {
+                chartRef.current.destroy();
+                chartRef.current = null;
+            }
+
+            const ctx = canvasRef.current.getContext('2d');
+
+            const colors = {
+                primary: 'rgba(250,204,21,0.9)',        // gold
+                primarySoft: 'rgba(250,204,21,0.16)',
+                accent: 'rgba(99,102,241,0.9)'          // indigo
+            };
+
+            const config = {
+                type: type,
+                data: {
+                    labels,
+                    datasets: [{
+                        label: title,
+                        data,
+                        backgroundColor: type === 'line'
+                            ? colors.primarySoft
+                            : [colors.primary, colors.accent],
+                        borderColor: colors.accent,
+                        borderWidth: type === 'line' ? 2 : 0,
+                        tension: 0.35,
+                        fill: type === 'line'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(15,23,42,0.95)',
+                            borderColor: 'rgba(148,163,184,0.4)',
+                            borderWidth: 1,
+                            padding: 10,
+                            cornerRadius: 12,
+                            titleColor: '#e5e7eb',
+                            bodyColor: '#fefce8'
+                        }
+                    },
+                    scales: type === 'doughnut'
+                        ? {}
+                        : {
+                            x: {
+                                grid: { display: false },
+                                ticks: { color: '#6b7280', font: { size: 11 } }
+                            },
+                            y: {
+                                grid: { color: 'rgba(148,163,184,0.25)', drawBorder: false },
+                                ticks: { color: '#6b7280', font: { size: 11 } }
+                            }
+                        }
+                }
+            };
+
+            chartRef.current = new Chart(ctx, config);
+
+            return () => {
+                if (chartRef.current) {
+                    chartRef.current.destroy();
+                    chartRef.current = null;
+                }
+            };
+        }, [title, type, JSON.stringify(labels), JSON.stringify(data)]);
+
+        return (
+            <Card className="flex flex-col gap-3">
+                <div className="flex justify-between items-start gap-2">
+                    <div>
+                        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">{title}</h3>
+                        {description && (
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{description}</p>
+                        )}
+                    </div>
+                </div>
+                <div className="h-40 sm:h-48">
+                    <canvas ref={canvasRef}/>
+                </div>
+            </Card>
+        );
+    }
+
+    // ----------------------------------------------------
+    // Login
+    // ----------------------------------------------------
+
+    function LoginView({ onLogin }) {
+        const [username, setUsername] = useState('');
+        const [password, setPassword] = useState('');
+        const [loading, setLoading] = useState(false);
+        const [error, setError] = useState('');
+
+        async function handleSubmit(e) {
+            e.preventDefault();
+            setError('');
+            setLoading(true);
+            try {
+                const data = await apiFetch('/api/login', {
+                    method: 'POST',
+                    body: JSON.stringify({ username, password })
+                });
+                onLogin(data.user);
+            } catch (err) {
+                setError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-slate-50 to-slate-200 dark:from-slate-950 dark:to-slate-900 px-4">
+                <div className="w-full max-w-md">
+                    <Card className="space-y-6 relative overflow-hidden">
+                        <div className="pointer-events-none absolute -top-16 -right-16 h-40 w-40 rounded-full bg-gold/25 blur-3xl dark:bg-gold/10"/>
+                        <div className="relative space-y-6">
+                            <Logo/>
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <div className="space-y-2">
+                                    <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                                        Gebruikersnaam
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={username}
+                                        onChange={(e) => setUsername(e.target.value)}
+                                        className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-gold/70 focus:border-gold/70
+                                                   dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-100"
+                                        autoComplete="username"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                                        Wachtwoord
+                                    </label>
+                                    <input
+                                        type="password"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-gold/70 focus:border-gold/70
+                                                   dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-100"
+                                        autoComplete="current-password"
+                                    />
+                                </div>
+                                {error && (
+                                    <p className="text-xs text-red-500">{error}</p>
+                                )}
+                                <PrimaryButton
+                                    label={loading ? 'Inloggen…' : 'Inloggen'}
+                                    className="w-full justify-center"
+                                />
+                            </form>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                                Standaardgebruikers staan in je <code>.env</code>, bijv.{" "}
+                                <span className="font-mono">papa / wachtwoord1</span> of{" "}
+                                <span className="font-mono">mama / wachtwoord2</span>.
+                            </p>
+                        </div>
+                    </Card>
+                </div>
+            </div>
+        );
+    }
+
+    // ----------------------------------------------------
+    // EventForm (met ml/g switch)
+    // ----------------------------------------------------
+
+    function EventForm({ onCreated }) {
+        const [feedType, setFeedType] = useState('bottle');
+        const [feedAmount, setFeedAmount] = useState('');
+        const [feedDuration, setFeedDuration] = useState('');
+        const [diaperType, setDiaperType] = useState('pee');
+        const [weight, setWeight] = useState('');
+        const [length, setLength] = useState('');
+        const [note, setNote] = useState('');
+        const [busy, setBusy] = useState(false);
+        const [error, setError] = useState('');
+
+        const isLiquid = feedType === 'bottle' || feedType === 'breast';
+        const unitLabel = isLiquid ? 'ml' : 'g';
+        const unitPlaceholder = isLiquid ? 'Bijv. 120' : 'Bijv. 30';
+
+        async function wrap(fn) {
+            setBusy(true);
+            setError('');
+            try {
+                await fn();
+                if (onCreated) onCreated();
+            } catch (err) {
+                setError(err.message);
+            } finally {
+                setBusy(false);
+            }
+        }
+
+        return (
+            <Card className="space-y-4">
+                <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                        Snel iets vastleggen
+                    </h3>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Eén of twee taps, klaar.
+                    </span>
+                </div>
+
+                {/* Quick actions */}
+                <div className="flex flex-wrap gap-2 text-xs">
+                    <PrimaryButton
+                        icon="⏱️"
+                        label="Slaap start / stop"
+                        className="flex-1 min-w-[140px]"
+                        onClick={() =>
+                            wrap(() => apiFetch('/api/sleep/toggle', { method: 'POST' }))
+                        }
+                    />
+                    <GhostButton
+                        icon="🍼"
+                        label="Voeding loggen"
+                        className="flex-1 min-w-[140px]"
+                        onClick={() =>
+                            wrap(() =>
+                                apiFetch('/api/feed', {
+                                    method: 'POST',
+                                    body: JSON.stringify({
+                                        subtype: feedType,
+                                        amount: feedAmount ? Number(feedAmount) : null,
+                                        duration: feedDuration ? Number(feedDuration) : null
+                                    })
+                                })
+                            )
+                        }
+                    />
+                    <GhostButton
+                        icon="🧷"
+                        label="Luier"
+                        className="flex-1 min-w-[120px]"
+                        onClick={() =>
+                            wrap(() =>
+                                apiFetch('/api/diaper', {
+                                    method: 'POST',
+                                    body: JSON.stringify({ subtype: diaperType })
+                                })
+                            )
+                        }
+                    />
+                </div>
+
+                {/* Voeding + luier details */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div className="space-y-2">
+                        <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                            Type voeding
+                        </label>
+                        <select
+                            value={feedType}
+                            onChange={(e) => setFeedType(e.target.value)}
+                            className="w-full rounded-xl border border-slate-300 bg-slate-50 px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-gold/60
+                                       dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-100"
+                        >
+                            <option value="bottle">Fles (vloeibaar)</option>
+                            <option value="breast">Borst (vloeibaar)</option>
+                            <option value="solid">Vast voedsel</option>
+                        </select>
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                            Hoeveelheid ({unitLabel})
+                        </label>
+                        <input
+                            type="number"
+                            min="0"
+                            value={feedAmount}
+                            onChange={(e) => setFeedAmount(e.target.value)}
+                            placeholder={unitPlaceholder}
+                            className="w-full rounded-xl border border-slate-300 bg-slate-50 px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-gold/60
+                                       dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-100"
+                        />
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                            Duur (minuten)
+                        </label>
+                        <input
+                            type="number"
+                            min="0"
+                            value={feedDuration}
+                            onChange={(e) => setFeedDuration(e.target.value)}
+                            placeholder="Bijv. 15"
+                            className="w-full rounded-xl border border-slate-300 bg-slate-50 px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-gold/60
+                                       dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-100"
+                        />
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                            Luier type
+                        </label>
+                        <div className="flex gap-1.5">
+                            {['pee', 'poop', 'mixed'].map((t) => (
+                                <button
+                                    key={t}
+                                    type="button"
+                                    onClick={() => setDiaperType(t)}
+                                    className={
+                                        "flex-1 py-1.5 rounded-xl border text-[11px] transition " +
+                                        (diaperType === t
+                                            ? 'border-gold bg-gold/20 text-slate-900 dark:text-slate-100'
+                                            : 'border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100 ' +
+                                              'dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-200 dark:hover:bg-slate-800')
+                                    }
+                                >
+                                    {t === 'pee' ? 'Plas' : t === 'poop' ? 'Poep' : 'Combi'}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Groei */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div className="space-y-2">
+                        <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                            Gewicht (kg)
+                        </label>
+                        <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={weight}
+                            onChange={(e) => setWeight(e.target.value)}
+                            placeholder="Bijv. 4.20"
+                            className="w-full rounded-xl border border-slate-300 bg-slate-50 px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-gold/60
+                                       dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-100"
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                            Lengte (cm)
+                        </label>
+                        <input
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={length}
+                            onChange={(e) => setLength(e.target.value)}
+                            placeholder="Bijv. 54"
+                            className="w-full rounded-xl border border-slate-300 bg-slate-50 px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-gold/60
+                                       dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-100"
+                        />
+                    </div>
+                </div>
+
+                <PrimaryButton
+                    icon="📈"
+                    label="Groei meten"
+                    className="w-full justify-center"
+                    onClick={() =>
+                        wrap(() =>
+                            apiFetch('/api/growth', {
+                                method: 'POST',
+                                body: JSON.stringify({
+                                    weight: weight ? Number(weight) : null,
+                                    length: length ? Number(length) : null
+                                })
+                            })
+                        )
+                    }
+                />
+
+                {/* Notitie */}
+                <div className="space-y-2 text-xs">
+                    <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                        Notitie
+                    </label>
+                    <textarea
+                        rows="2"
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        placeholder="Bijv: onrustige nacht, vaccinatie, tandjes, etc."
+                        className="w-full rounded-xl border border-slate-300 bg-slate-50 px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-gold/60 resize-none
+                                   dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-100"
+                    />
+                    <GhostButton
+                        icon="📝"
+                        label="Notitie opslaan"
+                        onClick={() =>
+                            wrap(() =>
+                                apiFetch('/api/note', {
+                                    method: 'POST',
+                                    body: JSON.stringify({ note })
+                                })
+                            )
+                        }
+                    />
+                </div>
+
+                {error && (
+                    <p className="text-[11px] text-red-500">{error}</p>
+                )}
+                {busy && (
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Bezig met opslaan…
+                    </p>
+                )}
+            </Card>
+        );
+    }
+
+    // ----------------------------------------------------
+    // Timeline
+    // ----------------------------------------------------
+
+    function Timeline({ events }) {
+        const typeLabels = {
+            sleep: 'Slaap',
+            feed: 'Voeding',
+            diaper: 'Luier',
+            growth: 'Groei',
+            note: 'Notitie'
+        };
+
+        function describe(e) {
+            switch (e.type) {
+                case 'sleep':
+                    return e.end_time
+                        ? `Sliep van ${formatTime(e.start_time)} tot ${formatTime(e.end_time)}`
+                        : `Slaapt sinds ${formatTime(e.start_time)}`;
+                case 'feed':
+                    return `${e.subtype === 'bottle' ? 'Fles' :
+                        e.subtype === 'breast' ? 'Borst' : 'Vast'}`
+                        + (e.value ? ` · ${e.value}${(e.subtype === 'bottle' || e.subtype === 'breast') ? ' ml' : ' g'}` : '')
+                        + (e.value_secondary ? ` · ${e.value_secondary} min` : '');
+                case 'diaper':
+                    return e.subtype === 'pee'
+                        ? 'Plasluier'
+                        : e.subtype === 'poop'
+                            ? 'Poep-luier'
+                            : 'Combi-luier';
+                case 'growth':
+                    return [
+                        e.value ? `${e.value.toFixed ? e.value.toFixed(2) : e.value} kg` : null,
+                        e.value_secondary ? `${e.value_secondary} cm` : null
+                    ].filter(Boolean).join(' · ') || 'Metingen';
+                case 'note':
+                    return e.note || 'Notitie';
+                default:
+                    return '';
+            }
+        }
+
+        function typeColor(type) {
+            switch (type) {
+                case 'sleep':
+                    return 'bg-primary-400';
+                case 'feed':
+                    return 'bg-emerald-400';
+                case 'diaper':
+                    return 'bg-amber-400';
+                case 'growth':
+                    return 'bg-cyan-400';
+                case 'note':
+                    return 'bg-pink-400';
+                default:
+                    return 'bg-slate-500';
+            }
+        }
+
+        return (
+            <Card className="space-y-3">
+                <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                        Vandaag
+                    </h3>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Laatste 24 uur
+                    </span>
+                </div>
+                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                    {events.length === 0 && (
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Nog geen gebeurtenissen vastgelegd.
+                        </p>
+                    )}
+                    {events.map((e) => (
+                        <div key={e.id} className="flex items-start gap-3 text-xs">
+                            <div className="flex flex-col items-center">
+                                <div className={"mt-1 h-1.5 w-1.5 rounded-full " + typeColor(e.type)} />
+                                <div className="flex-1 w-px bg-slate-200 dark:bg-slate-800 grow mt-1" />
+                            </div>
+                            <div className="flex-1">
+                                <div className="flex justify-between gap-2">
+                                    <span className="text-[11px] font-semibold text-slate-900 dark:text-slate-50">
+                                        {typeLabels[e.type] || e.type}
+                                    </span>
+                                    <span className="text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                        {formatTime(e.start_time)} · {formatDate(e.start_time)}
+                                    </span>
+                                </div>
+                                <p className="text-[11px] text-slate-700 dark:text-slate-300 mt-0.5">
+                                    {describe(e)}
+                                </p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </Card>
+        );
+    }
+
+    // ----------------------------------------------------
+    // Dashboard (tabs + theme toggle)
+    // ----------------------------------------------------
+
+    function Dashboard({ user, onLogout, theme, onToggleTheme }) {
+        const [status, setStatus] = useState(null);
+        const [summary, setSummary] = useState(null);
+        const [events, setEvents] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [error, setError] = useState('');
+        const [tab, setTab] = useState('overview'); // 'overview' | 'charts'
+
+        async function refreshAll() {
+            setError('');
+            try {
+                const [statusRes, summaryRes, eventsRes] = await Promise.all([
+                    apiFetch('/api/status'),
+                    apiFetch('/api/summary'),
+                    apiFetch('/api/events?days=1')
+                ]);
+                setStatus(statusRes);
+                setSummary(summaryRes);
+                setEvents(eventsRes.events || []);
+            } catch (err) {
+                setError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        useEffect(() => {
+            refreshAll();
+        }, []);
+
+        async function handleLogout() {
+            try {
+                await apiFetch('/api/logout', { method: 'POST' });
+            } catch (e) {}
+            onLogout();
+        }
+
+        const sleepLabel = status?.is_sleeping
+            ? `Slaapt sinds ${formatTime(status.last_sleep_start)}`
+            : 'Nu wakker';
+
+        const lastFeedLabel = status?.last_feed
+            ? `${status.last_feed.subtype === 'bottle'
+                ? 'Laatste fles'
+                : status.last_feed.subtype === 'breast'
+                    ? 'Laatste borstvoeding'
+                    : 'Laatste vaste voeding'} · ${formatTime(status.last_feed.when)}`
+            : 'Nog geen voeding geregistreerd';
+
+        const lastDiaperLabel = status?.last_diaper
+            ? `${status.last_diaper.subtype === 'pee'
+                ? 'Plasluier'
+                : status.last_diaper.subtype === 'poop'
+                    ? 'Poep-luier'
+                    : 'Combi'} · ${formatTime(status.last_diaper.when)}`
+            : 'Nog geen luier geregistreerd';
+
+        const lastGrowthLabel = status?.last_growth
+            ? `Laatste meting · ${formatTime(status.last_growth.when)}`
+            : 'Nog geen groei-metingen';
+
+        return (
+            <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 text-slate-900 dark:text-slate-50">
+                <div className="max-w-5xl mx-auto px-4 pb-8 pt-4 sm:pt-6">
+                    <header className="flex items-center justify-between mb-5 sm:mb-7 gap-3">
+                        <Logo/>
+                        <div className="flex items-center gap-3">
+                            {/* Theme toggle */}
+                            <button
+                                type="button"
+                                onClick={onToggleTheme}
+                                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] border border-slate-200 bg-slate-50 text-slate-700
+                                           hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                            >
+                                <span>{theme === 'dark' ? '🌙' : '☀️'}</span>
+                                <span>{theme === 'dark' ? 'Donker' : 'Licht'}</span>
+                            </button>
+
+                            <button
+                                onClick={handleLogout}
+                                className="text-[11px] sm:text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 underline-offset-4 hover:underline"
+                            >
+                                Uitloggen ({user.username})
+                            </button>
+                        </div>
+                    </header>
+
+                    <main className="space-y-5 sm:space-y-6">
+                        {error && (
+                            <div className="bg-red-50 border border-red-200 text-xs text-red-700 rounded-xl px-3 py-2
+                                            dark:bg-red-900/40 dark:border-red-500/40 dark:text-red-100">
+                                {error}
+                            </div>
+                        )}
+
+                        {/* Hero status */}
+                        <Card className="relative overflow-hidden">
+                            <div className="pointer-events-none absolute -top-20 -right-24 h-56 w-56 rounded-full bg-gold/25 blur-3xl dark:bg-gold/10"/>
+                            <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                <div className="space-y-2">
+                                    <span className="inline-flex items-center gap-2 text-[11px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                                        <span className={
+                                            "h-1.5 w-1.5 rounded-full " +
+                                            (status?.is_sleeping
+                                                ? "bg-emerald-400 animate-pulse"
+                                                : "bg-amber-400")
+                                        }/>
+                                        Huidige status
+                                    </span>
+                                    <h1 className="text-lg sm:text-xl font-semibold text-slate-900 dark:text-slate-50">
+                                        {status?.is_sleeping ? 'Baby slaapt' : 'Baby is wakker'}
+                                    </h1>
+                                    <p className="text-xs text-slate-600 dark:text-slate-300">
+                                        {sleepLabel}
+                                    </p>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 min-w-[220px]">
+                                    <StatPill label="Laatste voeding" value={lastFeedLabel} icon="🍼"/>
+                                    <StatPill label="Laatste luier" value={lastDiaperLabel} icon="🧷"/>
+                                    <StatPill label="Groei" value={lastGrowthLabel} icon="📈"/>
+                                    <StatPill
+                                        label="Overzicht"
+                                        value="Laatste 24 uur in één oogopslag"
+                                        icon="📊"
+                                    />
+                                </div>
+                            </div>
+                        </Card>
+
+                        {/* Tabs */}
+                        <div className="flex items-center justify-between gap-3">
+                            <div className="inline-flex rounded-full bg-slate-100 p-1 text-[11px] border border-slate-200
+                                             dark:bg-slate-900 dark:border-slate-700">
+                                <button
+                                    type="button"
+                                    onClick={() => setTab('overview')}
+                                    className={
+                                        "px-3 py-1.5 rounded-full flex items-center gap-1 " +
+                                        (tab === 'overview'
+                                            ? "bg-white text-slate-900 shadow-soft dark:bg-slate-800 dark:text-slate-50"
+                                            : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100")
+                                    }
+                                >
+                                    <span>📋</span>
+                                    <span>Overzicht</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setTab('charts')}
+                                    className={
+                                        "px-3 py-1.5 rounded-full flex items-center gap-1 " +
+                                        (tab === 'charts'
+                                            ? "bg-white text-slate-900 shadow-soft dark:bg-slate-800 dark:text-slate-50"
+                                            : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100")
+                                    }
+                                >
+                                    <span>📈</span>
+                                    <span>Grafieken</span>
+                                </button>
+                            </div>
+                            {loading && (
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Data wordt geladen…
+                                </p>
+                            )}
+                        </div>
+
+                        {tab === 'overview' && (
+                            <>
+                                <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
+                                    <EventForm onCreated={refreshAll}/>
+                                    <Timeline events={events}/>
+                                </section>
+                            </>
+                        )}
+
+                        {tab === 'charts' && (
+                            <section className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
+                                <ChartCard
+                                    title="Slaap (laatste 24 uur)"
+                                    description="Verdeling tussen dag- en nachtslaap."
+                                    type="doughnut"
+                                    labels={['Dag', 'Nacht']}
+                                    data={summary?.sleep_dist || [0, 0]}
+                                />
+                                <ChartCard
+                                    title="Voeding (laatste 24 uur)"
+                                    description="Vloeibaar (ml) vs vast (g)."
+                                    type="bar"
+                                    labels={['Vloeibaar', 'Vast']}
+                                    data={summary?.feed_dist || [0, 0]}
+                                />
+                                <ChartCard
+                                    title="Gewicht"
+                                    description="Ontwikkeling over de tijd."
+                                    type="line"
+                                    labels={(summary?.growth || []).map(g => g.date)}
+                                    data={(summary?.growth || []).map(g => g.weight)}
+                                />
+                            </section>
+                        )}
+                    </main>
+                </div>
+            </div>
+        );
+    }
+
+    // ----------------------------------------------------
+    // App root (theme handling)
+    // ----------------------------------------------------
+
+    function App() {
+        const [user, setUser] = useState(null);
+        const [checking, setChecking] = useState(true);
+        const [theme, setTheme] = useState('dark');
+
+        useEffect(() => {
+            // init theme uit localStorage of prefers-color-scheme
+            const stored = window.localStorage.getItem('babytracker-theme');
+            if (stored === 'light' || stored === 'dark') {
+                setTheme(stored);
+                if (stored === 'dark') {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+            } else {
+                const prefersDark = window.matchMedia &&
+                    window.matchMedia('(prefers-color-scheme: dark)').matches;
+                const initial = prefersDark ? 'dark' : 'light';
+                setTheme(initial);
+                if (initial === 'dark') {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+            }
+        }, []);
+
+        function toggleTheme() {
+            setTheme((prev) => {
+                const next = prev === 'dark' ? 'light' : 'dark';
+                if (next === 'dark') {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+                window.localStorage.setItem('babytracker-theme', next);
+                return next;
+            });
+        }
+
+        useEffect(() => {
+            async function check() {
+                try {
+                    const data = await apiFetch('/api/me');
+                    if (data.authenticated) {
+                        setUser(data.user);
+                    }
+                } catch (e) {
+                } finally {
+                    setChecking(false);
+                }
+            }
+            check();
+        }, []);
+
+        if (checking) {
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+                    <div className="flex flex-col items-center gap-3">
+                        <div className="h-9 w-9 rounded-full border-2 border-slate-300 border-t-gold animate-spin
+                                        dark:border-slate-700 dark:border-t-gold"/>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Baby Tracker wordt geladen…
+                        </p>
+                    </div>
+                </div>
+            );
+        }
+
+        if (!user) {
+            return <LoginView onLogin={setUser}/>;
+        }
+
+        return (
+            <Dashboard
+                user={user}
+                onLogout={() => setUser(null)}
+                theme={theme}
+                onToggleTheme={toggleTheme}
+            />
+        );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
