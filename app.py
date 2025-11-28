@@ -19,8 +19,8 @@ def init_files():
     if not os.path.exists(USERS_FILE):
         # Default users
         users = {
-            'sander': 'password',
-            'partner': 'password'
+            'sander': 'Seef88',
+            'eva': 'Seef88'
         }
         with open(USERS_FILE, 'w') as f:
             json.dump(users, f)
