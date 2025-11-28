@@ -1,10 +1,10 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 import json
 import os
 from datetime import datetime
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='.')
 CORS(app)
 
 DATA_FILE = 'baby_data.json'
@@ -19,13 +19,18 @@ def init_files():
     if not os.path.exists(USERS_FILE):
         # Default users
         users = {
-            'sander': 'Seef88',
-            'eva': 'Seef88'
+            'sander': 'password',
+            'partner': 'password'
         }
         with open(USERS_FILE, 'w') as f:
             json.dump(users, f)
 
 init_files()
+
+# Serve frontend
+@app.route('/')
+def index():
+    return send_from_directory('.', 'index.html')
 
 # Login endpoint
 @app.route('/api/login', methods=['POST'])
@@ -82,4 +87,5 @@ def delete_entry(entry_id):
     return jsonify({'success': True})
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=False, host='0.0.0.0', port=port)
