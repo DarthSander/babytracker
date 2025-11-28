@@ -1,8 +1,10 @@
 import os
+import io
+import csv
 from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
-from flask import Flask, send_from_directory, request, jsonify
+from flask import Flask, send_from_directory, request, jsonify, Response
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import (
     LoginManager,
@@ -163,7 +165,12 @@ def api_login():
     password = data.get("password") or ""
 
     if not username or not password:
-        return jsonify({"ok": False, "error": "Gebruikersnaam en wachtwoord zijn verplicht."}), 400
+        return (
+            jsonify(
+                {"ok": False, "error": "Gebruikersnaam en wachtwoord zijn verplicht."}
+            ),
+            400,
+        )
 
     user = User.query.filter_by(username=username).first()
     if not user or not user.check_password(password):
@@ -199,7 +206,9 @@ def api_sleep_toggle():
     if open_sleep:
         open_sleep.end_time = now_dt
         db.session.commit()
-        return jsonify({"ok": True, "status": "stopped", "event": open_sleep.to_dict()})
+        return jsonify(
+            {"ok": True, "status": "stopped", "event": open_sleep.to_dict()}
+        )
 
     # start nieuwe slaap
     subtype = "night" if is_night(now_dt) else "day"
@@ -221,7 +230,9 @@ def api_feed():
         type="feed",
         subtype=subtype,
         value=float(value) if value is not None else None,
-        value_secondary=float(value_secondary) if value_secondary is not None else None,
+        value_secondary=(
+            float(value_secondary) if value_secondary is not None else None
+        ),
         start_time=now(),
     )
     db.session.add(event)
@@ -253,7 +264,10 @@ def api_growth():
     length = data.get("length")
 
     if weight is None and length is None:
-        return jsonify({"ok": False, "error": "Gewicht of lengte is verplicht."}), 400
+        return (
+            jsonify({"ok": False, "error": "Gewicht of lengte is verplicht."}),
+            400,
+        )
 
     event = Event(
         type="growth",
@@ -336,7 +350,7 @@ def api_status():
         .first()
     )
 
-    def fmt_event(e: Event | None):
+    def fmt_event(e: "Event | None"):
         if not e:
             return None
         return {
@@ -349,7 +363,9 @@ def api_status():
         {
             "ok": True,
             "is_sleeping": is_sleeping,
-            "last_sleep_start": last_sleep.start_time.isoformat() if last_sleep else None,
+            "last_sleep_start": last_sleep.start_time.isoformat()
+            if last_sleep
+            else None,
             "last_feed": fmt_event(last_feed),
             "last_diaper": fmt_event(last_diaper),
             "last_growth": fmt_event(last_growth),
@@ -424,6 +440,63 @@ def api_summary():
             ],
             "growth": growth_series,
         }
+    )
+
+
+# -------------------------------------------------
+# CSV Export
+# -------------------------------------------------
+
+
+@app.route("/api/export")
+@login_required
+def api_export():
+    """
+    Exporteer ALLE events als CSV-bestand.
+    Kolommen: id,type,subtype,value,value_secondary,start_time,end_time,note
+    """
+    events = Event.query.order_by(Event.start_time.asc()).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    # header
+    writer.writerow(
+        [
+            "id",
+            "type",
+            "subtype",
+            "value",
+            "value_secondary",
+            "start_time",
+            "end_time",
+            "note",
+        ]
+    )
+
+    for e in events:
+        writer.writerow(
+            [
+                e.id,
+                e.type,
+                e.subtype or "",
+                "" if e.value is None else e.value,
+                "" if e.value_secondary is None else e.value_secondary,
+                e.start_time.isoformat() if e.start_time else "",
+                e.end_time.isoformat() if e.end_time else "",
+                (e.note or "").replace("\n", " ").replace("\r", " "),
+            ]
+        )
+
+    csv_data = output.getvalue()
+    output.close()
+
+    filename = f"babytracker_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
 
