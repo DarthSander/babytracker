@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Baby Tracker</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: { colors: { slate: { 850: '#1e293b' } } }
+            }
+        };
+    </script>
+    <style>
+        body { background-color: #f8fafc; color: #0f172a; }
+        .dark body { background-color: #111827; color: #f3f4f6; }
+        input, textarea, select { color: #0f172a !important; }
+        .dark input, .dark textarea, .dark select { color: #f3f4f6 !important; background-color: #374151 !important; border-color: #4b5563; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        const Icon = ({ name, size = 20, className="" }) => {
+            useEffect(() => { lucide.createIcons(); }, [name]);
+            return <i data-lucide={name} width={size} height={size} className={className}></i>;
+        };
+
+        // --- COMPONENTS ---
+
+        // Flexibele Grafiek Component met Keuzemenu
+        const FlexibleChart = ({ title, data, labels, colors, defaultType = 'doughnut' }) => {
+            const canvasRef = useRef(null);
+            const chartInstanceRef = useRef(null);
+            const [chartType, setChartType] = useState(defaultType);
+
+            useEffect(() => {
+                if (canvasRef.current && data) {
+                    if (chartInstanceRef.current) chartInstanceRef.current.destroy();
+
+                    const ctx = canvasRef.current.getContext('2d');
+                    chartInstanceRef.current = new Chart(ctx, {
+                        type: chartType,
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: title,
+                                data: data,
+                                backgroundColor: chartType === 'line' ? colors[0] : colors,
+                                borderColor: colors[0],
+                                borderWidth: chartType === 'line' ? 2 : 0,
+                                tension: 0.3,
+                                fill: chartType === 'line' ? false : true
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { display: chartType !== 'bar', position: 'bottom', labels: { color: '#94a3b8' } }
+                            },
+                            scales: {
+                                x: { display: chartType !== 'doughnut' && chartType !== 'pie' },
+                                y: { display: chartType !== 'doughnut' && chartType !== 'pie' }
+                            }
+                        }
+                    });
+                }
+            }, [data, chartType]);
+
+            return (
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
+                    <div className="flex justify-between items-center mb-4">
+                        <h4 className="font-bold text-xs uppercase text-slate-500">{title}</h4>
+                        <select
+                            value={chartType}
+                            onChange={(e) => setChartType(e.target.value)}
+                            className="text-xs p-1 rounded border dark:bg-slate-700 dark:border-slate-600 outline-none"
+                        >
+                            <option value="doughnut">Cirkel (Open)</option>
+                            <option value="pie">Taart</option>
+                            <option value="bar">Balk</option>
+                            <option value="line">Lijn</option>
+                        </select>
+                    </div>
+                    <div className="h-48 relative">
+                        <canvas ref={canvasRef}></canvas>
+                    </div>
+                </div>
+            );
+        };
+
+        const Modal = ({ isOpen, onClose, title, children }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md p-6 shadow-2xl border border-gray-200 dark:border-gray-700">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-xl font-bold text-slate-900 dark:text-white">{title}</h3>
+                            <button onClick={onClose}><Icon name="x" /></button>
+                        </div>
+                        {children}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- LOGIN ---
+        const Login = ({ onLogin }) => {
+            const [username, setUsername] = useState('');
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState('');
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                const res = await fetch('/login', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username, password})
+                });
+                const data = await res.json();
+                if (data.success) onLogin(); else setError(data.message);
+            };
+
+            return (
+                <div className="flex min-h-screen items-center justify-center bg-slate-100 p-4">
+                    <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-sm text-center border border-slate-200">
+                        <div className="w-32 h-32 mx-auto mb-6 rounded-full border-4 border-slate-100 overflow-hidden bg-white flex items-center justify-center">
+                            <img src="/static/logo_babytracker.png" alt="Logo" className="w-full h-full object-cover" />
+                        </div>
+                        <h2 className="text-2xl font-bold mb-6 text-slate-800">Inloggen</h2>
+                        {error && <div className="bg-red-100 text-red-600 p-2 rounded mb-4 text-sm font-bold">{error}</div>}
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <input type="text" placeholder="Gebruiker" value={username} onChange={e=>setUsername(e.target.value)} className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
+                            <input type="password" placeholder="Wachtwoord" value={password} onChange={e=>setPassword(e.target.value)} className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
+                            <button className="w-full bg-blue-600 text-white p-3 rounded-xl font-bold hover:bg-blue-700 transition shadow-lg">Starten</button>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- MAIN APP ---
+        const App = ({ onLogout, toggleTheme, darkMode }) => {
+            const [view, setView] = useState('home'); // 'home' of 'dashboard'
+
+            // Data States
+            const [status, setStatus] = useState({ is_sleeping: false });
+            const [events, setEvents] = useState([]); // Voor tijdlijn
+            const [notes, setNotes] = useState([]);   // Voor dagboek
+            const [stats, setStats] = useState(null);
+
+            // Timers
+            const [sleepTimer, setSleepTimer] = useState("00:00:00");
+            const [awakeTimer, setAwakeTimer] = useState("00:00:00");
+
+            // Input States
+            const [editModalOpen, setEditModalOpen] = useState(false);
+            const [editingEvent, setEditingEvent] = useState(null);
+            const [feedType, setFeedType] = useState('bottle');
+            const [amount, setAmount] = useState('');
+            const [note, setNote] = useState('');
+            const [diaryNote, setDiaryNote] = useState(''); // Nieuw voor dagboek
+            const [weight, setWeight] = useState('');
+            const [length, setLength] = useState('');
+
+            // Data Fetching
+            const fetchData = async () => {
+                try {
+                    const [s, e, n, st] = await Promise.all([
+                        fetch('/api/status').then(r=>r.json()),
+                        fetch('/api/events').then(r=>r.json()),
+                        fetch('/api/notes').then(r=>r.json()),
+                        fetch('/api/stats').then(r=>r.json())
+                    ]);
+                    setStatus(s); setEvents(e); setNotes(n); setStats(st);
+                } catch(e) { console.error(e); }
+            };
+
+            useEffect(() => { fetchData(); const i = setInterval(fetchData, 5000); return () => clearInterval(i); }, []);
+
+            // Timer Logic
+            useEffect(() => {
+                const tick = () => {
+                    const now = new Date().getTime();
+                    if (status.is_sleeping && status.sleep_start) {
+                        const diff = now - new Date(status.sleep_start).getTime();
+                        setSleepTimer(new Date(diff).toISOString().substr(11, 8));
+                    } else setSleepTimer("00:00:00");
+
+                    if (status.is_night_awake && status.awake_start) {
+                        const diff = now - new Date(status.awake_start).getTime();
+                        setAwakeTimer(new Date(diff).toISOString().substr(11, 8));
+                    } else setAwakeTimer("00:00:00");
+                };
+                const id = setInterval(tick, 1000); tick(); return () => clearInterval(id);
+            }, [status]);
+
+            // Actions
+            const toggleSleep = async () => { await fetch('/api/toggle_sleep', {method:'POST'}); fetchData(); };
+            const toggleWaking = async () => { await fetch('/api/toggle_waking', {method:'POST'}); fetchData(); };
+            const addEvent = async (type, subtype, val, val2, noteTxt) => {
+                await fetch('/api/add_event', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({type, subtype, value: val, value_secondary: val2, note: noteTxt}) });
+                setAmount(''); setNote(''); setWeight(''); setLength(''); fetchData();
+            };
+            const addDiaryNote = async () => {
+                if(!diaryNote) return;
+                await fetch('/api/add_event', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({type: 'note', subtype: 'diary', note: diaryNote}) });
+                setDiaryNote(''); fetchData();
+            };
+            const deleteEvent = async (id) => { if(confirm("Verwijderen?")) { await fetch(`/api/delete/${id}`, {method:'DELETE'}); fetchData(); } };
+
+            // Edit logic
+            const openEdit = (ev) => {
+                const format = (iso) => iso ? iso.slice(0, 16) : '';
+                setEditingEvent({ ...ev, start_time: format(ev.start_time), end_time: format(ev.end_time) });
+                setEditModalOpen(true);
+            };
+            const saveEdit = async () => {
+                await fetch('/api/update_event', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(editingEvent) });
+                setEditModalOpen(false); fetchData();
+            };
+
+            // RENDER
+            return (
+                <div className="pb-20 font-sans">
+                    {/* Header */}
+                    <header className="bg-white dark:bg-slate-800 shadow-sm px-4 py-3 flex justify-between items-center sticky top-0 z-50 border-b border-slate-200 dark:border-slate-700">
+                        <div className="flex items-center gap-3">
+                            <img src="/static/logo_babytracker.png" className="w-10 h-10 rounded-full border border-slate-200 object-cover bg-white" alt="Logo" />
+                            <div className="flex flex-col">
+                                <h1 className="font-bold text-lg text-slate-800 dark:text-white leading-tight">Baby Tracker</h1>
+                                <span className="text-xs text-slate-500">{view === 'home' ? 'Overzicht' : 'Dashboard'}</span>
+                            </div>
+                        </div>
+
+                        {/* Navigatie Knoppen */}
+                        <div className="flex bg-slate-100 dark:bg-slate-700 rounded-lg p-1">
+                            <button onClick={()=>setView('home')} className={`px-3 py-1 text-sm rounded-md font-bold transition ${view==='home'?'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300':'text-slate-500'}`}>Tracker</button>
+                            <button onClick={()=>setView('dashboard')} className={`px-3 py-1 text-sm rounded-md font-bold transition ${view==='dashboard'?'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300':'text-slate-500'}`}>Dashboard</button>
+                        </div>
+
+                        <div className="flex gap-2">
+                            <button onClick={toggleTheme} className="p-2 bg-slate-100 dark:bg-slate-700 rounded-full text-slate-600 dark:text-slate-200"><Icon name={darkMode?"sun":"moon"} size={18}/></button>
+                            <button onClick={onLogout} className="p-2 text-red-500"><Icon name="log-out" size={18}/></button>
+                        </div>
+                    </header>
+
+                    {/* --- VIEW: TRACKER (HOME) --- */}
+                    {view === 'home' && (
+                        <main className="container mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                            {/* KOLOM 1: INPUTS */}
+                            <div className="space-y-6">
+                                {/* Sleep Card */}
+                                <div className={`rounded-3xl p-6 shadow-xl text-white transition-all duration-300 transform
+                                    ${status.is_sleeping ? 'bg-indigo-600' : 'bg-orange-500'}`}>
+                                    <div className="flex justify-between items-center mb-6">
+                                        <span className="uppercase text-xs font-bold tracking-widest opacity-90">{status.is_sleeping ? 'Slaaptimer' : 'Actief'}</span>
+                                        <div className="bg-white/20 p-2 rounded-full"><Icon name={status.is_sleeping ? 'moon' : 'sun'} color="white" /></div>
+                                    </div>
+                                    <div className="text-6xl font-mono font-bold mb-8 text-center tracking-tight">{sleepTimer}</div>
+                                    <button onClick={toggleSleep} className="w-full bg-white text-slate-900 py-4 rounded-xl font-bold shadow-lg hover:bg-gray-50 transition active:scale-95">
+                                        {status.is_sleeping ? 'Wakker Maken' : 'Naar Bed'}
+                                    </button>
+                                    {status.is_sleeping && (
+                                        <div className="mt-6 pt-6 border-t border-white/20">
+                                            {status.is_night_awake ? (
+                                                <div className="bg-red-500/90 rounded-xl p-4 border border-red-400">
+                                                    <div className="text-center font-bold text-red-100 text-xs mb-1 uppercase">Tijd Wakker</div>
+                                                    <div className="text-3xl font-mono text-center font-bold text-white mb-3">{awakeTimer}</div>
+                                                    <button onClick={toggleWaking} className="w-full bg-white text-red-600 py-2 rounded-lg font-bold text-sm">Is weer in slaap</button>
+                                                </div>
+                                            ) : (
+                                                <button onClick={toggleWaking} className="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 border border-red-400">
+                                                    <Icon name="alert-circle" size={18} /> Is wakker geworden
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Feed Input */}
+                                <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
+                                    <h3 className="font-bold mb-4 flex items-center gap-2 text-slate-800 dark:text-white"><Icon name="utensils" size={18} /> Voeding</h3>
+                                    <div className="flex bg-slate-100 dark:bg-slate-700 rounded-lg p-1 mb-4">
+                                        {['bottle', 'solid', 'breast'].map(t => (
+                                            <button key={t} onClick={() => setFeedType(t)} className={`flex-1 py-2 text-sm rounded-md capitalize font-bold transition-all ${feedType === t ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500'}`}>{t==='solid'?'Vast':t==='bottle'?'Fles':'Borst'}</button>
+                                        ))}
+                                    </div>
+                                    <div className="space-y-3">
+                                        <input type="number" step="0.1" value={amount} onChange={e=>setAmount(e.target.value)} placeholder={feedType==='solid'?"Hoeveel gram?":"Hoeveel ml?"} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white" />
+                                        <textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="Notitie..." className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm h-20 text-slate-900 dark:text-white"></textarea>
+                                        <button onClick={() => addEvent('feed', feedType, amount, null, note)} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold transition">Opslaan</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* KOLOM 2: TIJDLIJN */}
+                            <div className="lg:col-span-1">
+                                <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col h-[800px]">
+                                    <div className="p-5 border-b border-slate-100 dark:border-slate-700 font-bold flex justify-between items-center text-slate-800 dark:text-white">
+                                        <span className="flex items-center gap-2"><Icon name="list" size={18}/> Tijdlijn</span>
+                                    </div>
+                                    <div className="overflow-y-auto flex-1 p-4 space-y-4">
+                                        {events.map(ev => (
+                                            <div key={ev.id} className="relative pl-6 pb-1 group">
+                                                <div className="absolute left-[9px] top-3 bottom-0 w-0.5 bg-slate-200 dark:bg-slate-700 -z-10 group-last:hidden"></div>
+                                                <div className={`absolute left-0 top-1 w-5 h-5 rounded-full border-4 border-white dark:border-slate-800 shadow-sm ${ev.type==='sleep'?'bg-indigo-500':ev.type==='waking'?'bg-red-500':ev.type==='feed'?'bg-blue-500':'bg-purple-500'}`}></div>
+                                                <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-xl ml-2 border border-slate-100 dark:border-slate-700/50">
+                                                    <div className="flex justify-between items-start mb-1">
+                                                        <span className="font-bold text-sm capitalize text-slate-700 dark:text-slate-200">{ev.type==='waking'?'Wakker (Nacht)':ev.subtype||ev.type}</span>
+                                                        <div className="flex gap-3">
+                                                            <button onClick={()=>openEdit(ev)} className="text-slate-400 hover:text-blue-500"><Icon name="edit-2" size={14} /></button>
+                                                            <button onClick={()=>deleteEvent(ev.id)} className="text-slate-400 hover:text-red-500"><Icon name="trash" size={14} /></button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                                                        {new Date(ev.start_time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                                                        {ev.end_time && ` - ${new Date(ev.end_time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`}
+                                                    </div>
+                                                    {(ev.value || ev.note) && (
+                                                        <div className="mt-2 text-sm border-t border-slate-200 dark:border-slate-600 pt-2 text-slate-600 dark:text-slate-300">
+                                                            {ev.value && <span className="font-bold mr-2">{ev.value}{ev.type==='feed' && ev.subtype!=='solid'?'ml':ev.type==='feed'?'g':ev.type==='growth'?'kg':''}</span>}
+                                                            {ev.note && <span className="italic opacity-80">{ev.note}</span>}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* KOLOM 3: SNEL TOEVOEGEN */}
+                             <div className="space-y-6">
+                                <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
+                                    <h3 className="font-bold mb-3 text-sm flex items-center gap-2 text-slate-800 dark:text-white"><Icon name="ruler" size={16} /> Meting</h3>
+                                    <div className="flex gap-2 mb-3">
+                                        <input type="number" step="0.01" value={weight} onChange={e=>setWeight(e.target.value)} placeholder="Kg" className="w-1/2 p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl outline-none text-slate-900 dark:text-white" />
+                                        <input type="number" step="0.1" value={length} onChange={e=>setLength(e.target.value)} placeholder="Cm" className="w-1/2 p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl outline-none text-slate-900 dark:text-white" />
+                                    </div>
+                                    <button onClick={()=>addEvent('growth', null, weight, length, 'Meting')} className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-xl font-bold transition shadow-md">Toevoegen</button>
+                                </div>
+                            </div>
+                        </main>
+                    )}
+
+                    {/* --- VIEW: DASHBOARD --- */}
+                    {view === 'dashboard' && stats && (
+                        <main className="container mx-auto p-4 md:p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                            {/* LINKS: GRAFIEKEN */}
+                            <div className="space-y-6">
+                                <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Statistieken</h2>
+                                <FlexibleChart
+                                    title="Slaapverdeling (Uren)"
+                                    data={stats.sleep_dist}
+                                    labels={['Dag', 'Nacht']}
+                                    colors={['#fbbf24', '#4338ca']}
+                                    defaultType="doughnut"
+                                />
+                                <FlexibleChart
+                                    title="Voedingstype (Aantal)"
+                                    data={stats.feed_dist}
+                                    labels={['Vloeibaar', 'Vast']}
+                                    colors={['#3b82f6', '#10b981']}
+                                    defaultType="pie"
+                                />
+                                <FlexibleChart
+                                    title="Gewicht (kg)"
+                                    data={stats.growth.map(g=>g.weight)}
+                                    labels={stats.growth.map(g=>g.date)}
+                                    colors={['#8b5cf6']}
+                                    defaultType="line"
+                                />
+                            </div>
+
+                            {/* RECHTS: DAGBOEK */}
+                            <div className="space-y-6">
+                                <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Dagboek</h2>
+
+                                {/* Nieuwe Notitie Input */}
+                                <div className="bg-white dark:bg-slate-800 p-4 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
+                                    <textarea
+                                        value={diaryNote}
+                                        onChange={(e) => setDiaryNote(e.target.value)}
+                                        placeholder="Schrijf iets over vandaag..."
+                                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-green-500 text-slate-900 dark:text-white h-32 mb-3"
+                                    ></textarea>
+                                    <button onClick={addDiaryNote} className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold transition">Notitie Opslaan</button>
+                                </div>
+
+                                {/* Notities Lijst */}
+                                <div className="space-y-4">
+                                    {notes.map(note => (
+                                        <div key={note.id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 relative group">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <span className="text-xs font-bold text-slate-400 uppercase">
+                                                    {new Date(note.start_time).toLocaleDateString()} - {new Date(note.start_time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                                                </span>
+                                                <button onClick={()=>deleteEvent(note.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"><Icon name="trash" size={16}/></button>
+                                            </div>
+                                            <p className="text-slate-700 dark:text-slate-300 whitespace-pre-line">{note.note}</p>
+                                        </div>
+                                    ))}
+                                    {notes.length === 0 && <p className="text-center text-slate-400">Nog geen dagboek notities.</p>}
+                                </div>
+                            </div>
+
+                        </main>
+                    )}
+
+                    {/* EDIT MODAL (Global) */}
+                    <Modal isOpen={editModalOpen} onClose={()=>setEditModalOpen(false)} title="Bewerk">
+                        {editingEvent && (
+                            <div className="space-y-4">
+                                <div><label className="text-xs font-bold text-slate-500">Start</label><input type="datetime-local" value={editingEvent.start_time} onChange={e=>setEditingEvent({...editingEvent, start_time: e.target.value})} className="w-full p-2 border rounded dark:bg-slate-700 dark:text-white" /></div>
+                                <div><label className="text-xs font-bold text-slate-500">Eind</label><input type="datetime-local" value={editingEvent.end_time||''} onChange={e=>setEditingEvent({...editingEvent, end_time: e.target.value})} className="w-full p-2 border rounded dark:bg-slate-700 dark:text-white" /></div>
+                                <div><label className="text-xs font-bold text-slate-500">Waarde</label><input type="number" step="0.01" value={editingEvent.value||''} onChange={e=>setEditingEvent({...editingEvent, value: e.target.value})} className="w-full p-2 border rounded dark:bg-slate-700 dark:text-white" /></div>
+                                <div><label className="text-xs font-bold text-slate-500">Notitie</label><textarea value={editingEvent.note||''} onChange={e=>setEditingEvent({...editingEvent, note: e.target.value})} className="w-full p-2 border rounded dark:bg-slate-700 dark:text-white h-20"></textarea></div>
+                                <button onClick={saveEdit} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold">Opslaan</button>
+                            </div>
+                        )}
+                    </Modal>
+                </div>
+            );
+        };
+
+        const Wrapper = () => {
+            const [auth, setAuth] = useState(false);
+            const [dark, setDark] = useState(localStorage.theme==='dark');
+            const [load, setLoad] = useState(true);
+
+            useEffect(() => {
+                if(dark) { document.documentElement.classList.add('dark'); localStorage.theme='dark'; }
+                else { document.documentElement.classList.remove('dark'); localStorage.theme='light'; }
+            }, [dark]);
+
+            useEffect(() => { fetch('/api/check_auth').then(r=>r.json()).then(d=>{ setAuth(d.authenticated); setLoad(false); }); }, []);
+
+            if(load) return <div className="min-h-screen flex items-center justify-center bg-slate-50">...</div>;
+            return auth ? <App onLogout={()=>location.href='/logout'} toggleTheme={()=>setDark(!dark)} darkMode={dark} /> : <Login onLogin={()=>setAuth(true)} />;
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<Wrapper />);
+    </script>
+</body>
+</html>
